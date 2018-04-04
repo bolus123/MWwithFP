@@ -6,9 +6,11 @@ cores <- detectCores() - 2
 
 rp <- 1000
 m.seq <- c(25, 30, 35, 40, 45, 75, 125, 150, 200)
+#m.seq <- 25
 #m.seq <- c(25, 30)
-n.seq <- c(5, 10)
-ARL0 <- 370
+#n.seq <- c(5, 10)
+#ARL0 <- 370
+ARL0 <- 500
 x.sim <- 10
 y.sim <- 10000
 tol <- .Machine$double.eps^0.25
@@ -38,7 +40,7 @@ for (m in m.seq) {
 						1:rp, 
 						function(x) {
 							U.Charting.constants(m, n, ARL0, method = 'Fligner-Policello', FP.stat.type = 'exact', 
-								interval = c(1, 9), x.sim = x.sim, y.sim = y.sim, tol = tol)
+								interval = c(1, 10), x.sim = x.sim, y.sim = y.sim, tol = tol)
 
 						}
 					)))

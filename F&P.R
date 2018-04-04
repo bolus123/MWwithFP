@@ -12,6 +12,7 @@
 
 #}
 
+c4.f <- function(nu) sqrt(2 / nu) * 1 / beta(nu / 2, 1 / 2) * sqrt(pi) 
 
 W.stat.f <- function(X, Y) {
 
@@ -192,6 +193,199 @@ U.control.chart <- function(X, Y, cc = NA, method = 'Fligner-Policello', plot.op
 
 }
 
+Welch.t.f0 <- function(X, Y, ARL0 = 370, c4.option = TRUE, plot.option = TRUE) {
+
+	m <- length(X)
+	n <- dim(Y)[2]
+	r <- dim(Y)[1]
+
+	X.bar <- mean(X)
+	Y.bar.vec <- rowMeans(Y)
+
+	S2.X <- var(as.vector(X))
+	S2.Y.vec <- diag(var(t(Y)))
+
+	eta.hat.vec <- S2.Y.vec / S2.X
+
+	S2.vec <- S2.X / m + eta.hat.vec * S2.X / n
+
+	nu.numer <- (1 + eta.hat.vec * m / n) ^ 2
+	nu.denom <- 1 / (m - 1) + eta.hat.vec ^ 2 * m ^ 2 / n ^ 2 / (n - 1)
+
+	nu <- nu.numer / nu.denom
+
+	if (c4.option == TRUE) {
+		for (i in 1:r) {
+
+			c4.vec <- rep(NA, r)	
+			c4.vec[i] <- ifelse(c4.option == TRUE, c4.f(nu[i]), 1)
+
+		}
+		
+	} else {
+		c4.vec <- rep(1, r)
+	}
+
+	Charting.stat <- (Y.bar.vec - X.bar) / sqrt(S2.vec) * c4.vec
+
+	quantile.t.vec <- qt(1 - 1 / 2 / ARL0, nu)
+
+	UCL <- quantile.t.vec * c4.vec
+	LCL <- -UCL
+
+	res <- list(Charting.stat = Charting.stat, LCL = LCL, UCL = UCL)
+
+	return(res)
+
+}
+#debug(Welch.t.f0)
+#Welch.t.f0(X, Y)
+
+Welch.t.f1 <- function(X, Y, ARL0 = 370, c4.option = TRUE, plot.option = TRUE) {
+
+	m <- length(X)
+	n <- dim(Y)[2]
+	r <- dim(Y)[1]
+
+	X.bar <- mean(X)
+	Y.bar.vec <- rowMeans(Y)
+
+	S2.X <- var(as.vector(X))
+	S2.Y.vec <- diag(var(t(Y)))
+
+	eta.hat.vec <- S2.Y.vec / S2.X
+
+	nu.numer <- (1 + eta.hat.vec * m / n) ^ 2
+	nu.denom <- 1 / (m - 1) + eta.hat.vec ^ 2 * m ^ 2 / n ^ 2 / (n - 1)
+
+	nu <- nu.numer / nu.denom
+
+	quantile.t.vec <- qt(1 - 1 / 2 / ARL0, nu)
+
+	c4 <- ifelse(c4.option == TRUE, c4.f(m - 1), 1)
+
+	factor.Kwt <- c4 * sqrt(1 + eta.hat.vec * m / n)
+
+	Kwt <- quantile.t.vec * factor.Kwt
+
+	Charting.stat <- (Y.bar.vec - X.bar) / sqrt(S2.X / m) * c4
+
+	LCL <- -Kwt
+	UCL <- Kwt
+
+	if (plot.option == TRUE) {
+
+		plot(c(1, r), c(min(Charting.stat, LCL), max(Charting.stat, UCL)), type = 'n', 
+				xlab = 'Subgroups', ylab = 'Charting Statistics', 
+				main = 'Welch t Control Chart')
+
+		points(1:r, Charting.stat, type = 'o', pch = 1)
+		points(1:r, LCL, lty = 2, col = 'red', type = 'l')
+		points(1:r, UCL, lty = 2, col = 'red', type = 'l')
+		abline(h = 0, lty = 2)
+
+
+	}
+
+	res <- list(Charting.stat = Charting.stat, CL = 0, LCL = LCL, UCL = UCL)
+
+	return(res)
+
+}
+
+#debug(Welch.t.f)
+#Welch.t.f1(X, Y)
+
+Welch.t.charting.constants <- function(m, n, eta, ARL0 = 370, interval = c(1, 3), c4 = 1) {
+
+	integrand.f <- function(g, m, n, eta, Kwt, c4) {
+
+		nu.numer <- (1 + g * eta * m / n) ^ 2
+		nu.denom <- 1 / (m - 1) + (g * eta) ^ 2 * m ^ 2 / n ^ 2 / (n - 1)
+
+		nu <- nu.numer / nu.denom
+
+		prob <- (pt(Kwt / c4 / sqrt(1 + g * eta * m / n), nu) 
+			- pt(-Kwt / c4 / sqrt(1 + g * eta * m / n), nu)) * df(g, n - 1, m - 1)
+
+		#ARL <- (1 - prob) ^ - 1 * df(g, n - 1, m - 1)
+
+		#return(ARL)
+
+		return(prob)
+
+	}
+
+	integral.f <- function(m, n, eta, Kwt, c4){
+
+		integrate(integrand.f, lower = 0, upper = Inf, m = m, n = n, eta = eta, Kwt = Kwt, c4 = c4)$value
+
+	}
+
+	root.finding <- function(Kwt, ARL0, m, n, eta, c4){
+
+		ARLin <- (1 - integral.f(m, n, eta, Kwt, c4)) ^ -1
+
+		cat('ARLin', ARLin, '\n')
+
+		ARL0 - ARLin
+
+	}
+
+	m <- length(X)
+	n <- dim(Y)[2]
+	r <- dim(Y)[1]	
+
+	uniroot(root.finding, interval = interval, m = m, n = n, eta = eta, c4 = c4, ARL0 = ARL0)$root
+
+
+}
+
+#Welch.t.charting.constants(125, 5, 1, interval = c(5, 6))
+
+Welch.t.f2 <- function(X, Y, eta = 1, ARL0 = 370, interval = c(1, 3), c4.option = TRUE, plot.option = TRUE) {
+
+	m <- length(X)
+	n <- dim(Y)[2]
+	r <- dim(Y)[1]
+
+	X.bar <- mean(X)
+	Y.bar.vec <- rowMeans(Y)
+
+	S2.X <- var(as.vector(X))
+
+	c4 <- ifelse(c4.option == TRUE, c4.f(m - 1), 1)
+
+	Kwt <- Welch.t.charting.constants(m, n, eta, ARL0 = ARL0, interval = interval, c4 = c4)
+
+	Charting.stat <- (Y.bar.vec - X.bar) / sqrt(S2.X / m) * c4
+
+	LCL <- -Kwt
+	UCL <- Kwt
+
+	if (plot.option == TRUE) {
+
+		plot(c(1, r), c(min(Charting.stat, LCL), max(Charting.stat, UCL)), type = 'n', 
+				xlab = 'Subgroups', ylab = 'Charting Statistics', 
+				main = 'Welch t Control Chart')
+
+		points(1:r, Charting.stat, type = 'o', pch = 1)
+		abline(h = LCL, lty = 2, col = 'red')
+		abline(h = UCL, lty = 2, col = 'red')
+		abline(h = 0, lty = 2)
+
+
+	}
+
+	res <- list(Charting.stat = Charting.stat, CL = 0, LCL = LCL, UCL = UCL)
+
+	return(res)
+
+}
+
+#Welch.t.f2(X, Y, eta = 1, ARL0 = 370, interval = c(1, 50), c4.option = TRUE, plot.option = TRUE) 
+
+
 #rp <- 120
 #
 #cc.vec <- rep(NA, rp)
@@ -255,13 +449,16 @@ U.control.chart <- function(X, Y, cc = NA, method = 'Fligner-Policello', plot.op
 #
 #), nrow = 20, ncol = 5, byrow = TRUE)
 #
+#
+#
 ##U.control.chart(X, Y, 7.5899)
 #
-##U.Charting.constants(125, 5, 370, method = 'Mann-Whitney', FP.stat.type = 'exact', interval = c(1, 3), x.sim = 10, y.sim = 10000, tol = .Machine$double.eps^0.25)
+#U.Charting.constants(25, 5, 500, method = 'Fligner-Policello', FP.stat.type = 'exact', 
+#	interval = c(1, 10), x.sim = 10, y.sim = 10000, tol = .Machine$double.eps^0.25)
 #
 #
-##U.control.chart(X, Y, cc = NA, method = 'Fligner-Policello', plot.option = TRUE, ARL0 = 370, 
-##	FP.stat.type = 'exact', interval = c(1, 9), x.sim = 20, y.sim = 10000, tol = .Machine$double.eps^0.25)
+#U.control.chart(X, Y, cc = NA, method = 'Fligner-Policello', plot.option = TRUE, ARL0 = 500, 
+#	FP.stat.type = 'exact', interval = c(1, 9), x.sim = 20, y.sim = 10000, tol = .Machine$double.eps^0.25)
 #
 #
 #U.control.chart(X, Y, cc = NA, method = 'Mann-Whitney', plot.option = TRUE, ARL0 = 370, 
